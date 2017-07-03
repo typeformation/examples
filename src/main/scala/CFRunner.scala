@@ -5,7 +5,7 @@ import typeformation.cf.Encoding._
 
 import scala.compat.java8.FutureConverters._
 import software.amazon.awssdk.services.cloudformation.CloudFormationAsyncClient
-import software.amazon.awssdk.services.cloudformation.model.{CreateStackRequest, Parameter}
+import software.amazon.awssdk.services.cloudformation.model.{CreateStackRequest, Parameter, UpdateStackRequest}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -21,19 +21,26 @@ class CFRunner {
 
     val templateBody = template.asJson.pretty(Printer.spaces2.copy(dropNullKeys = true))
 
-    val req =
-      CreateStackRequest.builder()
-        .stackName(stackName)
-        .parameters(parameters: _*)
-        .templateBody(templateBody)
-        .disableRollback(true)
-        .timeoutInMinutes(3)
-        .build()
+    //val req =
+    //  CreateStackRequest.builder()
+    //    .stackName(stackName)
+    //    .parameters(parameters: _*)
+    //    .templateBody(templateBody)
+    //    .disableRollback(true)
+    //    .timeoutInMinutes(20)
+    //    .build()
 
-    client.createStack(req).toScala.map(resp =>
-      println(resp)
-    ).onComplete { _ =>
-      client.close()
-    }
+    //val future = client.createStack(req).toScala.map(resp =>
+    //  println("Stack response:", resp)
+    //)
+
+    //future.onComplete { _ =>
+    //  println("Closing AWS client")
+    //  client.close()
+    //}
+    //future
+
+    println(templateBody)
+    Future.successful(())
   }
 }

@@ -30,6 +30,9 @@ object Main extends App {
         "sa-east-1" -> m("s3-website-sa-east-1.amazonaws.com", "Z7KQH4QJS55SO")
       ))
     }
+
+    val regionEndpoint = fnFindInMap(regionToEndpointZoneId, Region.ref, Endpoint)
+    val regionHostedZone = fnFindInMap(regionToEndpointZoneId, Region.ref, HostedZoneId)
   }
 
   val hostedZoneParam = Parameter.Str(
@@ -50,10 +53,15 @@ object Main extends App {
       ))
     )
 
-    val domainName =
-        fnJoin("", (websiteBucket.ref, fnFindInMap(Mappings.regionToEndpointZoneId, Region.ref, Mappings.Endpoint)))
+    val logfilesBucket = AWSS3Bucket(
+      logicalId = "afiorecdnlogs",
+      BucketName = "afiorecdnlogs"
+    )
 
-    val originId = "origin-id"
+    val domainName =
+        fnJoin("", (websiteBucket.ref, Mappings.regionEndpoint))
+
+    val originId = "website-origin-id"
     val origins = List(AWSCloudFrontDistribution.Origin(
       Id = originId,
       DomainName = domainName,
@@ -63,20 +71,23 @@ object Main extends App {
         HTTPSPort = 443))))
 
     val websiteCDN = {
-      val chunks =
-        (StackName.ref, AccountId.ref, lit("."), Region.ref, lit("."), hostedZoneParam.ref)
-
       AWSCloudFrontDistribution(
         logicalId = "WebsiteCDN",
+        DependsOn = Some(logfilesBucket),
         DistributionConfig = AWSCloudFrontDistribution.DistributionConfig(
           Comment = "CDN for S3-backed website",
-          Aliases = Some(List(fnJoin("", chunks))),
+          Aliases = Some(List(hostedZoneParam.ref)),
           Enabled = true,
           DefaultCacheBehavior = AWSCloudFrontDistribution.DefaultCacheBehavior(
+            Compress = true,
             ForwardedValues = AWSCloudFrontDistribution.ForwardedValues(QueryString = true),
             TargetOriginId = originId,
-            ViewerProtocolPolicy = "allow-all"
+            ViewerProtocolPolicy = "redirect-to-https"
           ),
+          Logging = Some(AWSCloudFrontDistribution.Logging(
+            Bucket = fnJoin("", (logfilesBucket.BucketName.get, Mappings.regionEndpoint)),
+            IncludeCookies = false
+          )),
           DefaultRootObject = "index.all",
           Origins = origins
         )
@@ -91,21 +102,21 @@ object Main extends App {
         HostedZoneName = Some(hostedZoneName),
         RecordSets = Some(List(AWSRoute53RecordSetGroup.RecordSet(
           Type = "A",
-          Name = hostedZoneName,
+          Name = hostedZoneParam.ref,
           AliasTarget = Some(AWSRoute53RecordSetGroup.AliasTarget(
-            HostedZoneId = fnFindInMap(Mappings.regionToEndpointZoneId, Region.ref, Mappings.HostedZoneId),
-            DNSName = fnFindInMap(Mappings.regionToEndpointZoneId, Region.ref, Mappings.Endpoint)
+            HostedZoneId = Mappings.regionHostedZone,
+            DNSName = websiteCDN.ref
           ))
         )))
       )
     }
 
-    val all: List[Resource] = List(websiteBucket, websiteDns)
+    val all: List[Resource] = List(websiteBucket, logfilesBucket, websiteCDN, websiteDns)
   }
 
   val websiteUrlOutput = Output(
     logicalId = "WebsiteURL",
-    Value = fnGetAtt(Resources.websiteBucket, "WebsiteURL"),
+    Value = fnGetAtt(Resources.websiteCDN, "DomainName"),
     Description = Some("URL of website hosted on S3")
   )
 
@@ -121,7 +132,7 @@ object Main extends App {
 
   println("Running stack!")
 
-  runner.createStack("website", template, params).onComplete { res =>
+  runner.createStack("website-cdn", template, params).onComplete { res =>
     println(s"Done: $res")
   }
 }
