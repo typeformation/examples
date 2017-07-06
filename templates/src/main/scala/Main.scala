@@ -58,8 +58,7 @@ object Main extends App {
       BucketName = "afiorecdnlogs"
     )
 
-    val domainName =
-        fnJoin("", (websiteBucket.ref, Mappings.regionEndpoint))
+    val domainName = fnJoin(".", (websiteBucket.ref, Mappings.regionEndpoint))
 
     val originId = "website-origin-id"
     val origins = List(AWSCloudFrontDistribution.Origin(
@@ -82,13 +81,13 @@ object Main extends App {
             Compress = true,
             ForwardedValues = AWSCloudFrontDistribution.ForwardedValues(QueryString = true),
             TargetOriginId = originId,
-            ViewerProtocolPolicy = "redirect-to-https"
+            ViewerProtocolPolicy = "allow-all"
           ),
           Logging = Some(AWSCloudFrontDistribution.Logging(
-            Bucket = fnJoin("", (logfilesBucket.BucketName.get, Mappings.regionEndpoint)),
+            Bucket = fnJoin(".", (logfilesBucket.BucketName.get, lit("s3.amazonaws.com"))),
             IncludeCookies = false
           )),
-          DefaultRootObject = "index.all",
+          DefaultRootObject = "index.html",
           Origins = origins
         )
       )
@@ -98,17 +97,17 @@ object Main extends App {
       val hostedZoneName = fnJoin("", (hostedZoneParam.ref, lit(".")))
 
       AWSRoute53RecordSetGroup(
-        logicalId = "websiteDNSName",
+        logicalId = "websiteDNS",
         HostedZoneName = Some(hostedZoneName),
         RecordSets = Some(List(AWSRoute53RecordSetGroup.RecordSet(
           Type = "A",
-          Name = hostedZoneParam.ref,
+          Name = hostedZoneName,
           AliasTarget = Some(AWSRoute53RecordSetGroup.AliasTarget(
             HostedZoneId = Mappings.regionHostedZone,
-            DNSName = websiteCDN.ref
-          ))
+            DNSName =  fnGetAtt(websiteCDN, "DomainName"): CfExp[String]
+          )
         )))
-      )
+      ))
     }
 
     val all: List[Resource] = List(websiteBucket, logfilesBucket, websiteCDN, websiteDns)
@@ -129,8 +128,6 @@ object Main extends App {
 
   val runner = new CFRunner
   val params = Map(hostedZoneParam.logicalId -> "afio.re")
-
-  println("Running stack!")
 
   runner.createStack("website-cdn", template, params).onComplete { res =>
     println(s"Done: $res")

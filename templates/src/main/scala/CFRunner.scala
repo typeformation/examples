@@ -1,16 +1,20 @@
 import io.circe.Printer
 import io.circe.syntax._
+import software.amazon.awssdk.regions.Region
 import typeformation.cf.{Encoding, Template}
 import typeformation.cf.Encoding._
 
 import scala.compat.java8.FutureConverters._
 import software.amazon.awssdk.services.cloudformation.CloudFormationAsyncClient
-import software.amazon.awssdk.services.cloudformation.model.{CreateStackRequest, Parameter, UpdateStackRequest}
+import software.amazon.awssdk.services.cloudformation.model.{CreateStackRequest, OnFailure, Parameter, UpdateStackRequest}
 
 import scala.concurrent.{ExecutionContext, Future}
 
 class CFRunner {
-  private val client = CloudFormationAsyncClient.create()
+  private val client =
+    CloudFormationAsyncClient.
+      builder().region(Region.EU_WEST_1).
+      build()
 
   def createStack(stackName: String, template: Template, params: Map[String, String])
                  (implicit ec: ExecutionContext): Future[Unit] = {
@@ -26,7 +30,7 @@ class CFRunner {
     //    .stackName(stackName)
     //    .parameters(parameters: _*)
     //    .templateBody(templateBody)
-    //    .disableRollback(true)
+    //    .onFailure(OnFailure.DO_NOTHING)
     //    .timeoutInMinutes(20)
     //    .build()
 
@@ -39,8 +43,6 @@ class CFRunner {
     //  client.close()
     //}
     //future
-
-    println(templateBody)
-    Future.successful(())
+    Future(println(templateBody))
   }
 }
