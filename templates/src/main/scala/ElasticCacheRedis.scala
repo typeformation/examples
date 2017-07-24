@@ -2,6 +2,7 @@ import java.nio.file.{Files, Paths}
 
 import typeformation.cf._
 import typeformation.cf.resources._
+import typeformation.cf.init._
 import typeformation.cf.syntax._
 import io.circe.syntax._
 import Encoding._
@@ -81,7 +82,12 @@ object ElasticCacheRedis extends App {
       MinLength = Some(9)
     )
 
-    val all = List(clusterType, instanceType, keyName, sshLocation)
+    val httpBinJarUrl = Parameter.Str(
+      logicalId = "HttpbinJarUrl",
+      Description = Some("URL where the httpbin Jar file might be downloaded")
+    )
+
+    val all = List(clusterType, instanceType, keyName, sshLocation, httpBinJarUrl)
   }
 
   object Policies {
@@ -180,8 +186,8 @@ object ElasticCacheRedis extends App {
         AWSEC2SecurityGroup.Rule(
           CidrIp = "0.0.0.0/0",
           IpProtocol = "tcp",
-          FromPort = 80,
-          ToPort = 80
+          FromPort = 8080,
+          ToPort = 8080
         ))
       )
     )
@@ -197,16 +203,48 @@ object ElasticCacheRedis extends App {
 
       val arch = fnFindInMap(AWSInstanceType2Arch, Params.instanceType.ref, Mappings.Arch)
       val imageId = fnFindInMap(AWSRegionArch2AMI, PseudoParameter.Region.ref, arch)
+      val logicalId = "WebAppInstance"
+      val configSetId = "config"
+      val ec2UserHome = "/home/ec2-user"
+      val serviceName = "httpbin"
+      val artefactName = s"$serviceName.jar"
+      val artefactPath = Seq(ec2UserHome, artefactName).mkString("/")
+
+      val httpBinUpstart = fnSub"""description "$serviceName service"
+
+start on runlevel [3]
+stop on shutdown
+
+exec sudo -u ec2-user AWS_REGION=${PseudoParameter.Region} AWS_CACHE_CLUSTER_ID=$redisCluster java -jar $artefactPath > $ec2UserHome/$serviceName.log 2>&1"""
+
+      val cfnInitCall = fnJoin"""#!/bin/bash -v
+/opt/aws/bin/cfn-init --stack ${PseudoParameter.StackId.ref} --region ${PseudoParameter.Region.ref} --resource $logicalId --configsets $configSetId
+        """
 
       AWSEC2Instance(
-        logicalId = "WebAppInstance",
+        logicalId = logicalId,
         IamInstanceProfile = Some(webAppInstanceProfile.ref),
         ImageId = imageId,
         InstanceType = Some(Params.instanceType.ref),
         KeyName = Some(Params.keyName.ref),
         SecurityGroupIds = Some(List(
           webAppSecurityGroup.ref
-        ))
+        )),
+        Metadata = Some(
+          Init(Init.Config(
+            logicalId = configSetId,
+            packages = List(Package("java-1.8.0-openjdk", yum)),
+            commands = List(
+              Command("01-remove-jdk-1.7", "yum -y remove java-1.7.0-openjdk"),
+              Command("02-start-httpbin", s"initctl start $serviceName")
+            ),
+            files = List(
+              File.FromUrl(artefactPath, Params.httpBinJarUrl.ref),
+              File.FromString(s"/etc/init/$serviceName.conf", httpBinUpstart)
+            )
+          )).asJson
+        ),
+        UserData = Some(fnBase64(cfnInitCall))
       )
     }
 
