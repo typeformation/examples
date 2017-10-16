@@ -13,9 +13,9 @@ val templates =
       libraryDependencies ++= Seq(
         "typeformation" %% "resources" % "0.1-SNAPSHOT",
         "software.amazon.awssdk" % "cloudformation" % "2.0.0-preview-1",
-        "org.scala-lang.modules" %% "scala-java8-compat" % "0.8.0"
-      )
-    )
+        "org.scala-lang.modules" %% "scala-java8-compat" % "0.8.0",
+        "org.scalatest" %% "scalatest" % "3.0.1" % "test"
+    ))
 
 val httpBin =
   (project in file("httpbin"))
@@ -34,7 +34,8 @@ val httpBin =
           "org.http4s" %% "http4s-blaze-server" % Http4sVersion,
           "org.http4s" %% "http4s-circe" % Http4sVersion,
           "org.http4s" %% "http4s-dsl" % Http4sVersion,
-          "ch.qos.logback" % "logback-classic" % "1.2.1"
+          "ch.qos.logback" % "logback-classic" % "1.2.1",
+           "org.scalatest" %% "scalatest" % "3.0.1" % "test"
         )
     )
 

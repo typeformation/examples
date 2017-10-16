@@ -4,8 +4,11 @@ import typeformation.cf._
 import typeformation.cf.resources._
 import typeformation.cf.init._
 import typeformation.cf.syntax._
+import typeformation.cf.iam._
+import typeformation.cf.iam.syntax._
 import io.circe.syntax._
 import Encoding._
+import typeformation.cf.PseudoParameter.Region
 
 object ElasticCacheRedis extends App {
 
@@ -91,49 +94,24 @@ object ElasticCacheRedis extends App {
   }
 
   object Policies {
-    val webApp = io.circe.parser.parse(
-      s"""
-        |{
-        |   "Statement": [
-        |      {
-        |          "Action": [
-        |              "sts:AssumeRole"
-        |          ],
-        |          "Effect": "Allow",
-        |          "Principal": {
-        |              "Service": [
-        |                  {
-        |                      "Fn::FindInMap": [
-        |                          "${Mappings.Region2Principal.logicalId}",
-        |                          {
-        |                              "Ref": "AWS::Region"
-        |                          },
-        |                          "EC2Principal"
-        |                      ]
-        |                  }
-        |              ]
-        |          }
-        |      }
-        |   ]
-        | }
-      """.stripMargin).getOrElse(sys.error(s"Cannot parse IAM policy for WebAppRole"))
+    val webApp = Policy(
+      Statement = List(Statement(
+        Effect = Effect.Allow,
+        Action = Action("sts:AssumeRole"),
+        Resource = Nil,
+        Principal = Some(
+          Principal.Service(
+            fnFindInMap(Mappings.Region2Principal, Region.ref,  "EC2Principal")
+          )
+        )
+    )))
 
-    val webAppRole = io.circe.parser.parse(
-      """
-        |{
-        |  "Statement": [
-        |      {
-        |          "Action": [
-        |              "elasticache:DescribeCacheClusters"
-        |          ],
-        |          "Effect": "Allow",
-        |          "Resource": [
-        |              "*"
-        |          ]
-        |      }
-        |  ]
-        |}
-      """.stripMargin).getOrElse(sys.error("cannot parse policy for webApp role"))
+    val webAppRole = Policy(
+      Statement = List(Statement(
+      Effect = Effect.Allow,
+      Action = Action("elasticache:DescribeCacheClusters"),
+      Resource = List(Arn("*")),
+    )))
   }
 
   object Resources {
@@ -155,7 +133,7 @@ object ElasticCacheRedis extends App {
 
     val webAppRole = AWSIAMRole(
       logicalId = "WebAppRole" ,
-      AssumeRolePolicyDocument = Policies.webApp,
+      AssumeRolePolicyDocument = Policies.webApp.asJson,
       Path = "/"
     )
 
@@ -166,7 +144,7 @@ object ElasticCacheRedis extends App {
 
     val webAppRolePolicy = AWSIAMPolicy(
       logicalId = "webAppRolePolicy",
-      PolicyDocument = Policies.webAppRole,
+      PolicyDocument = Policies.webAppRole.asJson,
       PolicyName = webAppRole.logicalId,
       Roles = Some(List(
         webAppRole.ref
@@ -177,13 +155,13 @@ object ElasticCacheRedis extends App {
       logicalId ="WebAppSecurityGroup",
       GroupDescription = "Enable SSH and HTTP access",
       SecurityGroupIngress = Some(List(
-        AWSEC2SecurityGroup.Rule(
+        AWSEC2SecurityGroup.Ingress(
           CidrIp = Some(Params.sshLocation.ref),
           IpProtocol = "tcp",
           FromPort = 22,
           ToPort = 22
         ),
-        AWSEC2SecurityGroup.Rule(
+        AWSEC2SecurityGroup.Ingress(
           CidrIp = "0.0.0.0/0",
           IpProtocol = "tcp",
           FromPort = 8080,
