@@ -2,13 +2,14 @@ package httpbin
 
 import java.util.UUID
 
+import cats.effect.IO
 import org.http4s._
-import org.http4s.dsl._
-import com.redis._
+import org.http4s.dsl.io._
+import com.redis.RedisClient
 import org.http4s.headers.`Content-Type`
 
 class HttpBin(redisClient: RedisClient) {
-  val service = HttpService {
+  val service = HttpService[IO] {
     case req @ POST -> Root / "bin" =>
       val uid = UUID.randomUUID()
       req.as[String].flatMap { body =>

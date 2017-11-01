@@ -1,12 +1,11 @@
 package httpbin
 
-import java.util.concurrent.{ExecutorService, Executors}
-
+import cats.effect.IO
 import software.amazon.awssdk.services.elasticache.ElastiCacheClient
-import com.redis._
+import com.redis.RedisClient
 
 import scala.util.Properties.envOrNone
-import fs2.{Stream, Task}
+import fs2.Stream
 import org.http4s.util.StreamApp
 import org.http4s.server.blaze.BlazeBuilder
 import org.slf4j.LoggerFactory
@@ -17,20 +16,21 @@ import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.elasticache.model.DescribeCacheClustersRequest
 
 import collection.JavaConverters._
+import scala.concurrent.ExecutionContext
 
-object Server extends StreamApp {
+object Server extends StreamApp[IO] {
   val port : Int              = envOrNone("HTTP_PORT") map (_.toInt) getOrElse 8080
   val ip   : String           = "0.0.0.0"
-  val pool : ExecutorService  = Executors.newCachedThreadPool()
+  val ec   : ExecutionContext = scala.concurrent.ExecutionContext.global
   val httpBin = new HttpBin(redisClient)
 
   private val logger = LoggerFactory.getLogger(this.getClass)
 
-  override def stream(args: List[String]): Stream[Task, Nothing] =
-    BlazeBuilder
+  override def stream(args: List[String], requestShutdown: IO[Unit]): Stream[IO, StreamApp.ExitCode] =
+    BlazeBuilder[IO]
       .bindHttp(port, ip)
       .mountService(httpBin.service)
-      .withServiceExecutor(pool)
+      .withExecutionContext(ec)
       .serve
 
   private def redisClient: RedisClient = {
