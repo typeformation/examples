@@ -7,19 +7,6 @@ scalaVersion in ThisBuild := "2.12.2"
 val Http4sVersion = "0.18.0-M4"
 val AwsSdkVersion = "2.0.0-preview-1"
 
-val templates =
-  (project in file("templates"))
-    .settings(
-      libraryDependencies ++= Seq(
-        "typeformation" %% "resources" % "0.1-SNAPSHOT",
-        "software.amazon.awssdk" % "cloudformation" % AwsSdkVersion,
-        "org.scala-lang.modules" %% "scala-java8-compat" % "0.8.0",
-        "org.typelevel" %% "cats-effect" % "0.5",
-        "com.typesafe.scala-logging" %% "scala-logging" % "3.7.2",
-        "ch.qos.logback" % "logback-classic" % "1.2.1",
-        "org.scalatest" %% "scalatest" % "3.0.1" % "test"
-    ))
-
 val httpBin =
   (project in file("httpbin"))
     .settings(
@@ -32,7 +19,6 @@ val httpBin =
 
         libraryDependencies ++= Seq(
           "software.amazon.awssdk" % "elasticache" % AwsSdkVersion,
-          "software.amazon.awssdk" % "aws-http-client-apache" % AwsSdkVersion,
           "net.debasishg" %% "redisclient" % "3.4",
           "org.http4s" %% "http4s-blaze-server" % Http4sVersion,
           "org.http4s" %% "http4s-dsl" % Http4sVersion,
@@ -42,4 +28,4 @@ val httpBin =
     )
 
 val root =
-  (project in file(".")).aggregate(templates, httpBin)
+  (project in file(".")).aggregate(httpBin)
